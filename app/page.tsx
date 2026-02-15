@@ -3,6 +3,8 @@ import { MenuClient } from "@/components/menu-client"
 import { StoreClosed } from "@/components/store-closed"
 
 export default async function Home() {
+  console.log("[v0] SUPABASE_URL exists:", !!process.env.NEXT_PUBLIC_SUPABASE_URL)
+  console.log("[v0] SUPABASE_KEY exists:", !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   try {
     const [banners, products, categories, flavorCategories, flavors, storeSettings] = await Promise.all([
       getBanners(),
