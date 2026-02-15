@@ -1,3 +1,4 @@
+// Data fetching functions for Supabase
 import { createClient } from '@/lib/supabase/server'
 import type { Banner, Product, ProductCategory, FlavorCategory, Flavor, StoreSettings } from '@/lib/types'
 
