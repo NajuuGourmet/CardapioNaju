@@ -149,74 +149,92 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
 
         {/* Content */}
         <div className="overflow-y-auto max-h-[50vh] p-5 space-y-6 no-scrollbar">
-          {categoriesWithFlavors.map((category, catIndex) => (
-            <div 
-              key={category.id} 
-              className="animate-slide-up"
-              style={{ animationDelay: `${catIndex * 0.1}s` }}
-            >
-              {/* Category header */}
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="font-bold text-white">{category.name}</h3>
-                  <p className="text-xs text-white/50">
-                    {category.is_required 
-                      ? `Escolha ${category.max_selections === 1 ? '1 opcao' : `ate ${category.max_selections}`}`
-                      : `Opcional`
-                    }
-                  </p>
-                </div>
-                {category.is_required && (
+          {categoriesWithFlavors.map((category, catIndex) => {
+            const isFreeCategory = Number(category.extra_price) === 0 && category.flavors.every(f => Number(f.extra_price) === 0)
+            return (
+              <div 
+                key={category.id} 
+                className={`animate-slide-up ${isFreeCategory ? 'rounded-2xl border border-green-500/30 bg-green-500/5 p-4' : ''}`}
+                style={{ animationDelay: `${catIndex * 0.1}s` }}
+              >
+                {/* Category header */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <h3 className="font-bold text-white flex items-center gap-2">
+                        {category.name}
+                        {isFreeCategory && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 uppercase tracking-wider">
+                            {'Gratis'}
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-xs text-white/50">
+                        {category.is_required 
+                          ? `Escolha ${category.max_selections === 1 ? '1 opcao' : `ate ${category.max_selections}`}`
+                          : isFreeCategory 
+                            ? `Escolha ${category.max_selections === 1 ? '1 opcao gratis' : `ate ${category.max_selections} gratis`}`
+                            : `Opcional`
+                        }
+                      </p>
+                    </div>
+                  </div>
                   <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${
                     getSelectionCount(category.id) >= 1 
-                      ? "bg-green-500/20 text-green-400" 
-                      : "bg-pink-500/20 text-pink-400"
+                      ? isFreeCategory ? "bg-green-500/20 text-green-400" : "bg-green-500/20 text-green-400"
+                      : category.is_required ? "bg-pink-500/20 text-pink-400" : "bg-white/10 text-white/40"
                   }`}>
                     {getSelectionCount(category.id)}/{category.max_selections}
                   </span>
-                )}
-              </div>
+                </div>
 
-              {/* Flavor options */}
-              <div className="grid grid-cols-2 gap-2">
-                {category.flavors.map((flavor, index) => {
-                  const selected = isFlavorSelected(category.id, flavor.id)
-                  return (
-                    <button
-                      key={flavor.id}
-                      type="button"
-                      onClick={() => handleFlavorToggle(category, flavor)}
-                      className={`p-3.5 rounded-xl text-left transition-all duration-300 ${
-                        selected 
-                          ? "gradient-primary shadow-lg shadow-pink-500/20" 
-                          : "glass hover:bg-white/10"
-                      }`}
-                      style={{ 
-                        animation: `slide-up 0.3s ease-out ${(catIndex * 0.1) + (index * 0.05)}s forwards`,
-                        opacity: 0 
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className={`font-medium text-sm ${selected ? 'text-white' : 'text-white/80'}`}>
-                          {flavor.name}
-                        </span>
-                        {selected && (
-                          <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center">
-                            <Check className="w-3 h-3 text-white" />
-                          </div>
-                        )}
-                      </div>
-                      {Number(flavor.extra_price) > 0 && (
-                        <span className={`text-xs mt-1 block ${selected ? 'text-white/70' : 'text-pink-400'}`}>
-                          +R$ {Number(flavor.extra_price).toFixed(2).replace(".", ",")}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
+                {/* Flavor options */}
+                <div className="grid grid-cols-2 gap-2">
+                  {category.flavors.map((flavor, index) => {
+                    const selected = isFlavorSelected(category.id, flavor.id)
+                    return (
+                      <button
+                        key={flavor.id}
+                        type="button"
+                        onClick={() => handleFlavorToggle(category, flavor)}
+                        className={`p-3.5 rounded-xl text-left transition-all duration-300 ${
+                          selected 
+                            ? isFreeCategory
+                              ? "bg-green-500/20 border border-green-500/40 shadow-lg shadow-green-500/10"
+                              : "gradient-primary shadow-lg shadow-pink-500/20" 
+                            : "glass hover:bg-white/10"
+                        }`}
+                        style={{ 
+                          animation: `slide-up 0.3s ease-out ${(catIndex * 0.1) + (index * 0.05)}s forwards`,
+                          opacity: 0 
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`font-medium text-sm ${selected ? 'text-white' : 'text-white/80'}`}>
+                            {flavor.name}
+                          </span>
+                          {selected && (
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isFreeCategory ? 'bg-green-500/30' : 'bg-white/20'}`}>
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
+                          )}
+                        </div>
+                        {Number(flavor.extra_price) > 0 ? (
+                          <span className={`text-xs mt-1 block ${selected ? 'text-white/70' : 'text-pink-400'}`}>
+                            +R$ {Number(flavor.extra_price).toFixed(2).replace(".", ",")}
+                          </span>
+                        ) : isFreeCategory ? (
+                          <span className={`text-xs mt-1 block ${selected ? 'text-green-300' : 'text-green-400/70'}`}>
+                            {'Gratis'}
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* Footer */}
