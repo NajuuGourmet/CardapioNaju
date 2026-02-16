@@ -34,6 +34,10 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
   const [selections, setSelections] = useState<Record<string, string[]>>({})
   const [quantity, setQuantity] = useState(1)
 
+  // Check if product is garrafinha (allows 2 flavor selections)
+  const isGarrafinha = product?.name?.toLowerCase().includes('garrafa') || 
+    product?.category?.slug?.toLowerCase().includes('garrafa')
+
   // Split topping categories into FREE + PAID virtual categories
   const virtualCategories: VirtualCategory[] = useMemo(() => {
     const result: VirtualCategory[] = []
@@ -62,11 +66,15 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
         })
       } else {
         const allFree = catFlavors.every(f => Number(f.extra_price) === 0)
+        // Garrafinha: allow 2 flavor selections on flavor categories
+        const maxSel = isGarrafinha && !isToppingCategory(category) && allFree
+          ? 2 
+          : category.max_selections
         result.push({
           id: category.id,
           name: category.name,
           is_required: category.is_required,
-          max_selections: category.max_selections,
+          max_selections: maxSel,
           flavors: catFlavors,
           isFree: allFree,
         })
@@ -74,7 +82,7 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
     }
 
     return result
-  }, [flavorCategories, flavors])
+  }, [flavorCategories, flavors, isGarrafinha])
 
   const handleFlavorToggle = (category: VirtualCategory, flavor: Flavor) => {
     setSelections(prev => {
@@ -225,9 +233,9 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
                     </h3>
                     <p className="text-xs text-white/50">
                       {category.isFree
-                        ? `Escolha ${category.max_selections === 1 ? '1 opcao gratis' : `ate ${category.max_selections} gratis`}`
+                        ? `Escolha ${category.max_selections === 1 ? '1 opcao gratis' : `ate ${category.max_selections} opcoes gratis`}`
                         : category.is_required 
-                          ? `Escolha ${category.max_selections === 1 ? '1 opcao' : `ate ${category.max_selections}`}`
+                          ? `Escolha ${category.max_selections === 1 ? '1 opcao' : `ate ${category.max_selections} opcoes`}`
                           : `Opcional`
                       }
                     </p>
