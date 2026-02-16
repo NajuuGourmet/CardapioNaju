@@ -1,12 +1,16 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { X, Check, Plus, Minus, Sparkles, Gift } from "lucide-react"
+import { X, Check, Plus, Minus, Sparkles } from "lucide-react"
 import { useCart, type FlavorSelection } from "@/lib/cart-context"
 import type { Product, FlavorCategory, Flavor } from "@/lib/types"
 
-// Categories with "topping" in the name get 1 free selection
-const FREE_TOPPING_SLUGS = ["topping", "toppings"]
+const TOPPING_KEYWORDS = ["topping", "toppings"]
+
+function isToppingCategory(category: FlavorCategory) {
+  return TOPPING_KEYWORDS.includes(category.slug?.toLowerCase() ?? "") ||
+    category.name.toLowerCase().includes("topping")
+}
 
 interface FlavorModalProps {
   product: Product | null
@@ -16,21 +20,63 @@ interface FlavorModalProps {
   onClose: () => void
 }
 
+interface VirtualCategory {
+  id: string
+  name: string
+  is_required: boolean
+  max_selections: number
+  flavors: Flavor[]
+  isFree: boolean
+}
+
 export function FlavorModal({ product, flavorCategories, flavors, open, onClose }: FlavorModalProps) {
   const { addItem } = useCart()
   const [selections, setSelections] = useState<Record<string, string[]>>({})
   const [quantity, setQuantity] = useState(1)
 
-  const categoriesWithFlavors = useMemo(() => {
-    return flavorCategories.map(category => ({
-      ...category,
-      flavors: flavors.filter(f => f.category_id === category.id),
-      hasFreeSlot: FREE_TOPPING_SLUGS.includes(category.slug?.toLowerCase()) || 
-                   category.name.toLowerCase().includes("topping"),
-    }))
+  // Split topping categories into FREE + PAID virtual categories
+  const virtualCategories: VirtualCategory[] = useMemo(() => {
+    const result: VirtualCategory[] = []
+
+    for (const category of flavorCategories) {
+      const catFlavors = flavors.filter(f => f.category_id === category.id)
+
+      if (isToppingCategory(category)) {
+        // FREE section: pick 1 gratis
+        result.push({
+          id: `${category.id}_free`,
+          name: `${category.name} Gratis`,
+          is_required: false,
+          max_selections: 1,
+          flavors: catFlavors.map(f => ({ ...f })),
+          isFree: true,
+        })
+        // PAID section: pick 1 paid (optional)
+        result.push({
+          id: `${category.id}_paid`,
+          name: `${category.name}`,
+          is_required: false,
+          max_selections: 1,
+          flavors: catFlavors.map(f => ({ ...f })),
+          isFree: false,
+        })
+      } else {
+        const allFree = catFlavors.every(f => Number(f.extra_price) === 0)
+        result.push({
+          id: category.id,
+          name: category.name,
+          is_required: category.is_required,
+          max_selections: category.max_selections,
+          flavors: catFlavors,
+          isFree: allFree,
+        })
+      }
+    }
+
+    return result
   }, [flavorCategories, flavors])
 
-  const handleFlavorToggle = (category: FlavorCategory & { hasFreeSlot?: boolean }, flavor: Flavor) => {
+  const handleFlavorToggle = (category: VirtualCategory, flavor: Flavor) => {
     setSelections(prev => {
       const current = prev[category.id] || []
       const isSelected = current.includes(flavor.id)
@@ -39,11 +85,8 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
         return { ...prev, [category.id]: current.filter(id => id !== flavor.id) }
       }
 
-      // For topping categories: allow 2 (1 free + 1 paid)
-      const maxAllowed = category.hasFreeSlot ? 2 : category.max_selections
-
-      if (current.length >= maxAllowed) {
-        if (maxAllowed === 1) {
+      if (current.length >= category.max_selections) {
+        if (category.max_selections === 1) {
           return { ...prev, [category.id]: [flavor.id] }
         }
         return prev
@@ -62,59 +105,49 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
   }
 
   const isValid = useMemo(() => {
-    return categoriesWithFlavors.every(category => {
+    return virtualCategories.every(category => {
       if (!category.is_required) return true
       return getSelectionCount(category.id) >= 1
     })
-  }, [categoriesWithFlavors, selections])
-
-  // Check if a flavor is the free one (first selected in a free-slot category)
-  const isFreeTopping = (categoryId: string, flavorId: string) => {
-    const category = categoriesWithFlavors.find(c => c.id === categoryId)
-    if (!category?.hasFreeSlot) return false
-    const selected = selections[categoryId] || []
-    return selected[0] === flavorId
-  }
+  }, [virtualCategories, selections])
 
   const calculateTotal = useMemo(() => {
     if (!product) return 0
     let total = Number(product.price)
 
-    for (const category of categoriesWithFlavors) {
+    for (const category of virtualCategories) {
+      if (category.isFree) continue // Free categories add no cost
       const selectedFlavors = selections[category.id] || []
-      selectedFlavors.forEach((flavorId, index) => {
+      for (const flavorId of selectedFlavors) {
         const flavor = category.flavors.find(f => f.id === flavorId)
         if (flavor && Number(flavor.extra_price) > 0) {
-          // First topping is free in free-slot categories
-          if (category.hasFreeSlot && index === 0) return
           total += Number(flavor.extra_price)
         }
-      })
+      }
     }
 
     return total * quantity
-  }, [product, categoriesWithFlavors, selections, quantity])
+  }, [product, virtualCategories, selections, quantity])
 
   const handleAddToCart = () => {
     if (!product || !isValid) return
 
     const flavorSelections: FlavorSelection[] = []
 
-    for (const category of categoriesWithFlavors) {
+    for (const category of virtualCategories) {
       const selectedFlavors = selections[category.id] || []
-      selectedFlavors.forEach((flavorId, index) => {
+      for (const flavorId of selectedFlavors) {
         const flavor = category.flavors.find(f => f.id === flavorId)
         if (flavor) {
-          const isFree = category.hasFreeSlot && index === 0
           flavorSelections.push({
             categoryId: category.id,
             categoryName: category.name,
             flavorId: flavor.id,
             flavorName: flavor.name,
-            price: isFree ? 0 : Number(flavor.extra_price),
+            price: category.isFree ? 0 : Number(flavor.extra_price),
           })
         }
-      })
+      }
     }
 
     addItem({
@@ -168,20 +201,14 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
 
         {/* Content */}
         <div className="overflow-y-auto max-h-[50vh] p-5 space-y-6 no-scrollbar">
-          {categoriesWithFlavors.map((category, catIndex) => {
-            const isFreeCategory = !category.hasFreeSlot && Number(category.extra_price) === 0 && category.flavors.every(f => Number(f.extra_price) === 0)
+          {virtualCategories.map((category, catIndex) => {
             const selCount = getSelectionCount(category.id)
-            const freeUsed = category.hasFreeSlot && selCount >= 1
 
             return (
               <div 
                 key={category.id} 
                 className={`animate-slide-up ${
-                  isFreeCategory 
-                    ? 'rounded-2xl border border-green-500/30 bg-green-500/5 p-4' 
-                    : category.hasFreeSlot
-                      ? 'rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4'
-                      : ''
+                  category.isFree ? 'rounded-2xl border border-green-500/30 bg-green-500/5 p-4' : ''
                 }`}
                 style={{ animationDelay: `${catIndex * 0.1}s` }}
               >
@@ -190,35 +217,27 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
                   <div>
                     <h3 className="font-bold text-white flex items-center gap-2">
                       {category.name}
-                      {isFreeCategory && (
+                      {category.isFree && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 uppercase tracking-wider">
                           {'Gratis'}
                         </span>
                       )}
-                      {category.hasFreeSlot && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                          <Gift className="w-3 h-3" />
-                          {'1 Gratis'}
-                        </span>
-                      )}
                     </h3>
                     <p className="text-xs text-white/50">
-                      {category.hasFreeSlot
-                        ? `1 gratis + 1 adicional pago`
+                      {category.isFree
+                        ? `Escolha ${category.max_selections === 1 ? '1 opcao gratis' : `ate ${category.max_selections} gratis`}`
                         : category.is_required 
                           ? `Escolha ${category.max_selections === 1 ? '1 opcao' : `ate ${category.max_selections}`}`
-                          : isFreeCategory 
-                            ? `Escolha ${category.max_selections === 1 ? '1 opcao gratis' : `ate ${category.max_selections} gratis`}`
-                            : `Opcional`
+                          : `Opcional`
                       }
                     </p>
                   </div>
                   <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${
                     selCount >= 1 
-                      ? (isFreeCategory || category.hasFreeSlot) ? "bg-green-500/20 text-green-400" : "bg-green-500/20 text-green-400"
+                      ? category.isFree ? "bg-green-500/20 text-green-400" : "bg-green-500/20 text-green-400"
                       : category.is_required ? "bg-pink-500/20 text-pink-400" : "bg-white/10 text-white/40"
                   }`}>
-                    {selCount}/{category.hasFreeSlot ? 2 : category.max_selections}
+                    {selCount}/{category.max_selections}
                   </span>
                 </div>
 
@@ -226,7 +245,6 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
                 <div className="grid grid-cols-2 gap-2">
                   {category.flavors.map((flavor, index) => {
                     const selected = isFlavorSelected(category.id, flavor.id)
-                    const isThisFree = selected && isFreeTopping(category.id, flavor.id)
 
                     return (
                       <button
@@ -235,11 +253,9 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
                         onClick={() => handleFlavorToggle(category, flavor)}
                         className={`p-3.5 rounded-xl text-left transition-all duration-300 ${
                           selected 
-                            ? isThisFree
-                              ? "bg-emerald-500/20 border border-emerald-500/40 shadow-lg shadow-emerald-500/10"
-                              : isFreeCategory
-                                ? "bg-green-500/20 border border-green-500/40 shadow-lg shadow-green-500/10"
-                                : "gradient-primary shadow-lg shadow-pink-500/20" 
+                            ? category.isFree
+                              ? "bg-green-500/20 border border-green-500/40 shadow-lg shadow-green-500/10"
+                              : "gradient-primary shadow-lg shadow-pink-500/20" 
                             : "glass hover:bg-white/10"
                         }`}
                         style={{ 
@@ -252,36 +268,18 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
                             {flavor.name}
                           </span>
                           {selected && (
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${(isThisFree || isFreeCategory) ? 'bg-green-500/30' : 'bg-white/20'}`}>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${category.isFree ? 'bg-green-500/30' : 'bg-white/20'}`}>
                               <Check className="w-3 h-3 text-white" />
                             </div>
                           )}
                         </div>
-                        {/* Price label */}
-                        {category.hasFreeSlot ? (
-                          <span className={`text-xs mt-1 block ${
-                            isThisFree 
-                              ? 'text-emerald-400 font-semibold' 
-                              : selected 
-                                ? 'text-white/70' 
-                                : !freeUsed 
-                                  ? 'text-emerald-400/70' 
-                                  : 'text-pink-400'
-                          }`}>
-                            {isThisFree 
-                              ? 'Gratis' 
-                              : !freeUsed && !selected
-                                ? 'Gratis' 
-                                : `+R$ ${Number(flavor.extra_price).toFixed(2).replace(".", ",")}`
-                            }
+                        {category.isFree ? (
+                          <span className={`text-xs mt-1 block ${selected ? 'text-green-300' : 'text-green-400/70'}`}>
+                            {'Gratis'}
                           </span>
                         ) : Number(flavor.extra_price) > 0 ? (
                           <span className={`text-xs mt-1 block ${selected ? 'text-white/70' : 'text-pink-400'}`}>
                             +R$ {Number(flavor.extra_price).toFixed(2).replace(".", ",")}
-                          </span>
-                        ) : isFreeCategory ? (
-                          <span className={`text-xs mt-1 block ${selected ? 'text-green-300' : 'text-green-400/70'}`}>
-                            {'Gratis'}
                           </span>
                         ) : null}
                       </button>
