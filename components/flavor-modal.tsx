@@ -1,9 +1,12 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { X, Check, Plus, Minus, Sparkles } from "lucide-react"
+import { X, Check, Plus, Minus, Sparkles, Gift } from "lucide-react"
 import { useCart, type FlavorSelection } from "@/lib/cart-context"
 import type { Product, FlavorCategory, Flavor } from "@/lib/types"
+
+// Categories with "topping" in the name get 1 free selection
+const FREE_TOPPING_SLUGS = ["topping", "toppings"]
 
 interface FlavorModalProps {
   product: Product | null
@@ -21,7 +24,9 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
   const categoriesWithFlavors = useMemo(() => {
     return flavorCategories.map(category => ({
       ...category,
-      flavors: flavors.filter(f => f.category_id === category.id)
+      flavors: flavors.filter(f => f.category_id === category.id),
+      hasFreeSlot: FREE_TOPPING_SLUGS.includes(category.slug?.toLowerCase()) || 
+                   category.name.toLowerCase().includes("topping"),
     }))
   }, [flavorCategories, flavors])
 
@@ -60,18 +65,28 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
     })
   }, [categoriesWithFlavors, selections])
 
+  // Check if a flavor is the free one (first selected in a free-slot category)
+  const isFreeTopping = (categoryId: string, flavorId: string) => {
+    const category = categoriesWithFlavors.find(c => c.id === categoryId)
+    if (!category?.hasFreeSlot) return false
+    const selected = selections[categoryId] || []
+    return selected[0] === flavorId
+  }
+
   const calculateTotal = useMemo(() => {
     if (!product) return 0
     let total = Number(product.price)
 
     for (const category of categoriesWithFlavors) {
       const selectedFlavors = selections[category.id] || []
-      for (const flavorId of selectedFlavors) {
+      selectedFlavors.forEach((flavorId, index) => {
         const flavor = category.flavors.find(f => f.id === flavorId)
         if (flavor && Number(flavor.extra_price) > 0) {
+          // First topping is free in free-slot categories
+          if (category.hasFreeSlot && index === 0) return
           total += Number(flavor.extra_price)
         }
-      }
+      })
     }
 
     return total * quantity
@@ -84,18 +99,19 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
 
     for (const category of categoriesWithFlavors) {
       const selectedFlavors = selections[category.id] || []
-      for (const flavorId of selectedFlavors) {
+      selectedFlavors.forEach((flavorId, index) => {
         const flavor = category.flavors.find(f => f.id === flavorId)
         if (flavor) {
+          const isFree = category.hasFreeSlot && index === 0
           flavorSelections.push({
             categoryId: category.id,
             categoryName: category.name,
             flavorId: flavor.id,
             flavorName: flavor.name,
-            price: Number(flavor.extra_price),
+            price: isFree ? 0 : Number(flavor.extra_price),
           })
         }
-      }
+      })
     }
 
     addItem({
@@ -150,41 +166,56 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
         {/* Content */}
         <div className="overflow-y-auto max-h-[50vh] p-5 space-y-6 no-scrollbar">
           {categoriesWithFlavors.map((category, catIndex) => {
-            const isFreeCategory = Number(category.extra_price) === 0 && category.flavors.every(f => Number(f.extra_price) === 0)
+            const isFreeCategory = !category.hasFreeSlot && Number(category.extra_price) === 0 && category.flavors.every(f => Number(f.extra_price) === 0)
+            const selCount = getSelectionCount(category.id)
+            const freeUsed = category.hasFreeSlot && selCount >= 1
+
             return (
               <div 
                 key={category.id} 
-                className={`animate-slide-up ${isFreeCategory ? 'rounded-2xl border border-green-500/30 bg-green-500/5 p-4' : ''}`}
+                className={`animate-slide-up ${
+                  isFreeCategory 
+                    ? 'rounded-2xl border border-green-500/30 bg-green-500/5 p-4' 
+                    : category.hasFreeSlot
+                      ? 'rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4'
+                      : ''
+                }`}
                 style={{ animationDelay: `${catIndex * 0.1}s` }}
               >
                 {/* Category header */}
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div>
-                      <h3 className="font-bold text-white flex items-center gap-2">
-                        {category.name}
-                        {isFreeCategory && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 uppercase tracking-wider">
-                            {'Gratis'}
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-xs text-white/50">
-                        {category.is_required 
+                  <div>
+                    <h3 className="font-bold text-white flex items-center gap-2">
+                      {category.name}
+                      {isFreeCategory && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 uppercase tracking-wider">
+                          {'Gratis'}
+                        </span>
+                      )}
+                      {category.hasFreeSlot && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                          <Gift className="w-3 h-3" />
+                          {'1 Gratis'}
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-xs text-white/50">
+                      {category.hasFreeSlot
+                        ? `Escolha 1 gratis! Adicionais com custo`
+                        : category.is_required 
                           ? `Escolha ${category.max_selections === 1 ? '1 opcao' : `ate ${category.max_selections}`}`
                           : isFreeCategory 
                             ? `Escolha ${category.max_selections === 1 ? '1 opcao gratis' : `ate ${category.max_selections} gratis`}`
                             : `Opcional`
-                        }
-                      </p>
-                    </div>
+                      }
+                    </p>
                   </div>
                   <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${
-                    getSelectionCount(category.id) >= 1 
-                      ? isFreeCategory ? "bg-green-500/20 text-green-400" : "bg-green-500/20 text-green-400"
+                    selCount >= 1 
+                      ? (isFreeCategory || category.hasFreeSlot) ? "bg-green-500/20 text-green-400" : "bg-green-500/20 text-green-400"
                       : category.is_required ? "bg-pink-500/20 text-pink-400" : "bg-white/10 text-white/40"
                   }`}>
-                    {getSelectionCount(category.id)}/{category.max_selections}
+                    {selCount}/{category.max_selections}
                   </span>
                 </div>
 
@@ -192,6 +223,8 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
                 <div className="grid grid-cols-2 gap-2">
                   {category.flavors.map((flavor, index) => {
                     const selected = isFlavorSelected(category.id, flavor.id)
+                    const isThisFree = selected && isFreeTopping(category.id, flavor.id)
+
                     return (
                       <button
                         key={flavor.id}
@@ -199,9 +232,11 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
                         onClick={() => handleFlavorToggle(category, flavor)}
                         className={`p-3.5 rounded-xl text-left transition-all duration-300 ${
                           selected 
-                            ? isFreeCategory
-                              ? "bg-green-500/20 border border-green-500/40 shadow-lg shadow-green-500/10"
-                              : "gradient-primary shadow-lg shadow-pink-500/20" 
+                            ? isThisFree
+                              ? "bg-emerald-500/20 border border-emerald-500/40 shadow-lg shadow-emerald-500/10"
+                              : isFreeCategory
+                                ? "bg-green-500/20 border border-green-500/40 shadow-lg shadow-green-500/10"
+                                : "gradient-primary shadow-lg shadow-pink-500/20" 
                             : "glass hover:bg-white/10"
                         }`}
                         style={{ 
@@ -214,12 +249,30 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
                             {flavor.name}
                           </span>
                           {selected && (
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isFreeCategory ? 'bg-green-500/30' : 'bg-white/20'}`}>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${(isThisFree || isFreeCategory) ? 'bg-green-500/30' : 'bg-white/20'}`}>
                               <Check className="w-3 h-3 text-white" />
                             </div>
                           )}
                         </div>
-                        {Number(flavor.extra_price) > 0 ? (
+                        {/* Price label */}
+                        {category.hasFreeSlot ? (
+                          <span className={`text-xs mt-1 block ${
+                            isThisFree 
+                              ? 'text-emerald-400 font-semibold' 
+                              : selected 
+                                ? 'text-white/70' 
+                                : !freeUsed 
+                                  ? 'text-emerald-400/70' 
+                                  : 'text-pink-400'
+                          }`}>
+                            {isThisFree 
+                              ? 'Gratis' 
+                              : !freeUsed && !selected
+                                ? 'Gratis' 
+                                : `+R$ ${Number(flavor.extra_price).toFixed(2).replace(".", ",")}`
+                            }
+                          </span>
+                        ) : Number(flavor.extra_price) > 0 ? (
                           <span className={`text-xs mt-1 block ${selected ? 'text-white/70' : 'text-pink-400'}`}>
                             +R$ {Number(flavor.extra_price).toFixed(2).replace(".", ",")}
                           </span>
