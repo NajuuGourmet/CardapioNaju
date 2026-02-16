@@ -5,6 +5,13 @@ import { X, Check, Plus, Minus, Sparkles } from "lucide-react"
 import { useCart, type FlavorSelection } from "@/lib/cart-context"
 import type { Product, FlavorCategory, Flavor } from "@/lib/types"
 
+const TOPPING_KEYWORDS = ["topping", "toppings"]
+
+function isToppingCategory(category: FlavorCategory) {
+  return TOPPING_KEYWORDS.includes(category.slug?.toLowerCase() ?? "") ||
+    category.name.toLowerCase().includes("topping")
+}
+
 interface FlavorModalProps {
   product: Product | null
   flavorCategories: FlavorCategory[]
@@ -13,19 +20,71 @@ interface FlavorModalProps {
   onClose: () => void
 }
 
+interface VirtualCategory {
+  id: string
+  name: string
+  is_required: boolean
+  max_selections: number
+  flavors: Flavor[]
+  isFree: boolean
+}
+
 export function FlavorModal({ product, flavorCategories, flavors, open, onClose }: FlavorModalProps) {
   const { addItem } = useCart()
   const [selections, setSelections] = useState<Record<string, string[]>>({})
   const [quantity, setQuantity] = useState(1)
 
-  const categoriesWithFlavors = useMemo(() => {
-    return flavorCategories.map(category => ({
-      ...category,
-      flavors: flavors.filter(f => f.category_id === category.id)
-    }))
-  }, [flavorCategories, flavors])
+  // Check if product is garrafinha (allows 2 flavor selections)
+  const isGarrafinha = product?.name?.toLowerCase().includes('garrafa') || 
+    product?.category?.slug?.toLowerCase().includes('garrafa')
 
-  const handleFlavorToggle = (category: FlavorCategory, flavor: Flavor) => {
+  // Split topping categories into FREE + PAID virtual categories
+  const virtualCategories: VirtualCategory[] = useMemo(() => {
+    const result: VirtualCategory[] = []
+
+    for (const category of flavorCategories) {
+      const catFlavors = flavors.filter(f => f.category_id === category.id)
+
+      if (isToppingCategory(category)) {
+        // FREE section: pick 1 gratis
+        result.push({
+          id: `${category.id}_free`,
+          name: `${category.name} Gratis`,
+          is_required: false,
+          max_selections: 1,
+          flavors: catFlavors.map(f => ({ ...f })),
+          isFree: true,
+        })
+        // PAID section: pick 1 paid (optional)
+        result.push({
+          id: `${category.id}_paid`,
+          name: `${category.name}`,
+          is_required: false,
+          max_selections: 1,
+          flavors: catFlavors.map(f => ({ ...f })),
+          isFree: false,
+        })
+      } else {
+        const allFree = catFlavors.every(f => Number(f.extra_price) === 0)
+        // Garrafinha: allow 2 flavor selections on flavor categories
+        const maxSel = isGarrafinha && !isToppingCategory(category) && allFree
+          ? 2 
+          : category.max_selections
+        result.push({
+          id: category.id,
+          name: category.name,
+          is_required: category.is_required,
+          max_selections: maxSel,
+          flavors: catFlavors,
+          isFree: allFree,
+        })
+      }
+    }
+
+    return result
+  }, [flavorCategories, flavors, isGarrafinha])
+
+  const handleFlavorToggle = (category: VirtualCategory, flavor: Flavor) => {
     setSelections(prev => {
       const current = prev[category.id] || []
       const isSelected = current.includes(flavor.id)
@@ -54,17 +113,18 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
   }
 
   const isValid = useMemo(() => {
-    return categoriesWithFlavors.every(category => {
+    return virtualCategories.every(category => {
       if (!category.is_required) return true
       return getSelectionCount(category.id) >= 1
     })
-  }, [categoriesWithFlavors, selections])
+  }, [virtualCategories, selections])
 
   const calculateTotal = useMemo(() => {
     if (!product) return 0
     let total = Number(product.price)
 
-    for (const category of categoriesWithFlavors) {
+    for (const category of virtualCategories) {
+      if (category.isFree) continue // Free categories add no cost
       const selectedFlavors = selections[category.id] || []
       for (const flavorId of selectedFlavors) {
         const flavor = category.flavors.find(f => f.id === flavorId)
@@ -75,14 +135,14 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
     }
 
     return total * quantity
-  }, [product, categoriesWithFlavors, selections, quantity])
+  }, [product, virtualCategories, selections, quantity])
 
   const handleAddToCart = () => {
     if (!product || !isValid) return
 
     const flavorSelections: FlavorSelection[] = []
 
-    for (const category of categoriesWithFlavors) {
+    for (const category of virtualCategories) {
       const selectedFlavors = selections[category.id] || []
       for (const flavorId of selectedFlavors) {
         const flavor = category.flavors.find(f => f.id === flavorId)
@@ -92,7 +152,7 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
             categoryName: category.name,
             flavorId: flavor.id,
             flavorName: flavor.name,
-            price: Number(flavor.extra_price),
+            price: category.isFree ? 0 : Number(flavor.extra_price),
           })
         }
       }
@@ -149,74 +209,94 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
 
         {/* Content */}
         <div className="overflow-y-auto max-h-[50vh] p-5 space-y-6 no-scrollbar">
-          {categoriesWithFlavors.map((category, catIndex) => (
-            <div 
-              key={category.id} 
-              className="animate-slide-up"
-              style={{ animationDelay: `${catIndex * 0.1}s` }}
-            >
-              {/* Category header */}
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="font-bold text-white">{category.name}</h3>
-                  <p className="text-xs text-white/50">
-                    {category.is_required 
-                      ? `Escolha ${category.max_selections === 1 ? '1 opcao' : `ate ${category.max_selections}`}`
-                      : `Opcional`
-                    }
-                  </p>
-                </div>
-                {category.is_required && (
-                  <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${
-                    getSelectionCount(category.id) >= 1 
-                      ? "bg-green-500/20 text-green-400" 
-                      : "bg-pink-500/20 text-pink-400"
-                  }`}>
-                    {getSelectionCount(category.id)}/{category.max_selections}
-                  </span>
-                )}
-              </div>
+          {virtualCategories.map((category, catIndex) => {
+            const selCount = getSelectionCount(category.id)
 
-              {/* Flavor options */}
-              <div className="grid grid-cols-2 gap-2">
-                {category.flavors.map((flavor, index) => {
-                  const selected = isFlavorSelected(category.id, flavor.id)
-                  return (
-                    <button
-                      key={flavor.id}
-                      type="button"
-                      onClick={() => handleFlavorToggle(category, flavor)}
-                      className={`p-3.5 rounded-xl text-left transition-all duration-300 ${
-                        selected 
-                          ? "gradient-primary shadow-lg shadow-pink-500/20" 
-                          : "glass hover:bg-white/10"
-                      }`}
-                      style={{ 
-                        animation: `slide-up 0.3s ease-out ${(catIndex * 0.1) + (index * 0.05)}s forwards`,
-                        opacity: 0 
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className={`font-medium text-sm ${selected ? 'text-white' : 'text-white/80'}`}>
-                          {flavor.name}
-                        </span>
-                        {selected && (
-                          <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center">
-                            <Check className="w-3 h-3 text-white" />
-                          </div>
-                        )}
-                      </div>
-                      {Number(flavor.extra_price) > 0 && (
-                        <span className={`text-xs mt-1 block ${selected ? 'text-white/70' : 'text-pink-400'}`}>
-                          +R$ {Number(flavor.extra_price).toFixed(2).replace(".", ",")}
+            return (
+              <div 
+                key={category.id} 
+                className={`animate-slide-up ${
+                  category.isFree ? 'rounded-2xl border border-green-500/30 bg-green-500/5 p-4' : ''
+                }`}
+                style={{ animationDelay: `${catIndex * 0.1}s` }}
+              >
+                {/* Category header */}
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="font-bold text-white flex items-center gap-2">
+                      {category.name}
+                      {category.isFree && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 uppercase tracking-wider">
+                          {'Gratis'}
                         </span>
                       )}
-                    </button>
-                  )
-                })}
+                    </h3>
+                    <p className="text-xs text-white/50">
+                      {category.isFree
+                        ? `Escolha ${category.max_selections === 1 ? '1 opcao gratis' : `ate ${category.max_selections} opcoes gratis`}`
+                        : category.is_required 
+                          ? `Escolha ${category.max_selections === 1 ? '1 opcao' : `ate ${category.max_selections} opcoes`}`
+                          : `Opcional`
+                      }
+                    </p>
+                  </div>
+                  <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${
+                    selCount >= 1 
+                      ? category.isFree ? "bg-green-500/20 text-green-400" : "bg-green-500/20 text-green-400"
+                      : category.is_required ? "bg-pink-500/20 text-pink-400" : "bg-white/10 text-white/40"
+                  }`}>
+                    {selCount}/{category.max_selections}
+                  </span>
+                </div>
+
+                {/* Flavor options */}
+                <div className="grid grid-cols-2 gap-2">
+                  {category.flavors.map((flavor, index) => {
+                    const selected = isFlavorSelected(category.id, flavor.id)
+
+                    return (
+                      <button
+                        key={flavor.id}
+                        type="button"
+                        onClick={() => handleFlavorToggle(category, flavor)}
+                        className={`p-3.5 rounded-xl text-left transition-all duration-300 ${
+                          selected 
+                            ? category.isFree
+                              ? "bg-green-500/20 border border-green-500/40 shadow-lg shadow-green-500/10"
+                              : "gradient-primary shadow-lg shadow-pink-500/20" 
+                            : "glass hover:bg-white/10"
+                        }`}
+                        style={{ 
+                          animation: `slide-up 0.3s ease-out ${(catIndex * 0.1) + (index * 0.05)}s forwards`,
+                          opacity: 0 
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`font-medium text-sm ${selected ? 'text-white' : 'text-white/80'}`}>
+                            {flavor.name}
+                          </span>
+                          {selected && (
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${category.isFree ? 'bg-green-500/30' : 'bg-white/20'}`}>
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
+                          )}
+                        </div>
+                        {category.isFree ? (
+                          <span className={`text-xs mt-1 block ${selected ? 'text-green-300' : 'text-green-400/70'}`}>
+                            {'Gratis'}
+                          </span>
+                        ) : Number(flavor.extra_price) > 0 ? (
+                          <span className={`text-xs mt-1 block ${selected ? 'text-white/70' : 'text-pink-400'}`}>
+                            +R$ {Number(flavor.extra_price).toFixed(2).replace(".", ",")}
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* Footer */}

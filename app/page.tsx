@@ -1,4 +1,4 @@
-import { getBanners, getProducts, getProductCategories, getFlavorCategories, getFlavors, getStoreSettings } from "@/lib/data"
+import { getBanners, getProducts, getProductCategories, getFlavorCategories, getFlavors, getStoreSettings } from "@/lib/data" // v2
 import { MenuClient } from "@/components/menu-client"
 import { StoreClosed } from "@/components/store-closed"
 
