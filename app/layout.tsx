@@ -17,7 +17,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: 'Naju Gourmet - Cardapio Digital',
-  description: 'O melhor acai da regiao! Escolha seus sabores favoritos e faca seu pedido.',
+  description: 'Naju Gourmet - O melhor acai da regiao! Escolha seus sabores favoritos e faca seu pedido.',
   generator: 'v0.app',
   icons: {
     icon: '/images/logo-naju.png',
