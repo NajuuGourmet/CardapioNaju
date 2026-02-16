@@ -30,7 +30,7 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
     }))
   }, [flavorCategories, flavors])
 
-  const handleFlavorToggle = (category: FlavorCategory, flavor: Flavor) => {
+  const handleFlavorToggle = (category: FlavorCategory & { hasFreeSlot?: boolean }, flavor: Flavor) => {
     setSelections(prev => {
       const current = prev[category.id] || []
       const isSelected = current.includes(flavor.id)
@@ -39,8 +39,11 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
         return { ...prev, [category.id]: current.filter(id => id !== flavor.id) }
       }
 
-      if (current.length >= category.max_selections) {
-        if (category.max_selections === 1) {
+      // For topping categories: allow 2 (1 free + 1 paid)
+      const maxAllowed = category.hasFreeSlot ? 2 : category.max_selections
+
+      if (current.length >= maxAllowed) {
+        if (maxAllowed === 1) {
           return { ...prev, [category.id]: [flavor.id] }
         }
         return prev
@@ -201,7 +204,7 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
                     </h3>
                     <p className="text-xs text-white/50">
                       {category.hasFreeSlot
-                        ? `Escolha 1 gratis! Adicionais com custo`
+                        ? `1 gratis + 1 adicional pago`
                         : category.is_required 
                           ? `Escolha ${category.max_selections === 1 ? '1 opcao' : `ate ${category.max_selections}`}`
                           : isFreeCategory 
@@ -215,7 +218,7 @@ export function FlavorModal({ product, flavorCategories, flavors, open, onClose 
                       ? (isFreeCategory || category.hasFreeSlot) ? "bg-green-500/20 text-green-400" : "bg-green-500/20 text-green-400"
                       : category.is_required ? "bg-pink-500/20 text-pink-400" : "bg-white/10 text-white/40"
                   }`}>
-                    {selCount}/{category.max_selections}
+                    {selCount}/{category.hasFreeSlot ? 2 : category.max_selections}
                   </span>
                 </div>
 
