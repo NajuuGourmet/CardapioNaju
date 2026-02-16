@@ -216,32 +216,37 @@ export function CheckoutModal({ open, onClose, totalPrice, onConfirm, isLoading 
 
             {/* PIX Details */}
             {paymentMethod === "pix" && (
-              <div className="mt-3 p-4 glass rounded-xl animate-scale-in">
-                <div className="text-center mb-3">
+              <div className="mt-3 p-4 glass rounded-xl animate-scale-in space-y-3">
+                <div className="text-center">
                   <p className="text-sm text-white/60">Chave PIX (Celular)</p>
                   <p className="text-xl font-bold text-pink-400 mt-1">{PIX_KEY}</p>
                 </div>
-                <div className="text-center text-sm text-white/50 space-y-0.5 mb-3">
+                <div className="text-center text-sm text-white/50 space-y-0.5">
                   <p>{PIX_NAME}</p>
                   <p>{PIX_BANK}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={copyPixKey}
-                    className="flex items-center justify-center gap-2 py-2.5 glass rounded-lg hover:bg-white/10 transition-colors"
-                  >
-                    {copied ? (
-                      <><Check className="h-4 w-4 text-green-400" /><span className="text-sm font-medium text-green-400">Copiado!</span></>
-                    ) : (
-                      <><Copy className="h-4 w-4 text-white/60" /><span className="text-sm font-medium text-white/80">Copiar</span></>
-                    )}
-                  </button>
+                <button
+                  onClick={copyPixKey}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 glass rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  {copied ? (
+                    <><Check className="h-4 w-4 text-green-400" /><span className="text-sm font-medium text-green-400">Copiado!</span></>
+                  ) : (
+                    <><Copy className="h-4 w-4 text-white/60" /><span className="text-sm font-medium text-white/80">Copiar chave PIX</span></>
+                  )}
+                </button>
+
+                {/* Instrucao de envio do comprovante */}
+                <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20">
+                  <p className="text-sm text-green-400 text-center font-medium mb-2">
+                    Apos o pagamento, envie o comprovante pelo WhatsApp:
+                  </p>
                   <button
                     onClick={sendReceipt}
-                    className="flex items-center justify-center gap-2 py-2.5 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-colors"
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-semibold"
                   >
-                    <MessageCircle className="h-4 w-4" />
-                    <span className="text-sm font-medium">Enviar</span>
+                    <MessageCircle className="h-5 w-5" />
+                    <span>Enviar comprovante via WhatsApp</span>
                   </button>
                 </div>
               </div>
