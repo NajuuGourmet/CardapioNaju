@@ -45,12 +45,12 @@ export function SplashScreen({ onEnter, isOpen }: SplashScreenProps) {
           <div className="absolute -inset-4 bg-gradient-to-r from-pink-500/40 to-purple-500/40 rounded-full blur-2xl animate-pulse-glow" />
           
           {/* Logo container - Redonda */}
-          <div className="relative w-36 h-36 rounded-full overflow-hidden shadow-2xl shadow-pink-500/40 ring-4 ring-white/20">
+          <div className="relative w-44 h-44 rounded-full overflow-hidden shadow-2xl shadow-pink-500/40 ring-4 ring-white/20">
             <Image
               src="/images/logo-naju.png"
               alt="Naju Gourmet"
               fill
-              className="object-cover"
+              className="object-cover scale-[1.15]"
               priority
             />
             {/* Shine effect */}

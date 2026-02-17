@@ -17,13 +17,13 @@ export function Header({ onCartClick }: HeaderProps) {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-white rounded-full p-1 shadow-lg ring-2 ring-white/20 hover:ring-white/40 transition-all hover:scale-105">
+            <div className="w-14 h-14 rounded-full overflow-hidden shadow-lg ring-2 ring-white/30 hover:ring-white/50 transition-all hover:scale-105">
               <Image
                 src="/images/logo-naju.png"
                 alt="Naju Gourmet"
-                width={44}
-                height={44}
-                className="object-contain rounded-full"
+                width={56}
+                height={56}
+                className="object-cover w-full h-full rounded-full"
               />
             </div>
             <div>
