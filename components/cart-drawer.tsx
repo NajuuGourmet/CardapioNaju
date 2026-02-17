@@ -90,6 +90,12 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
     setIsLoading(true)
     const finalTotal = totalPrice + checkoutData.deliveryFee
     
+    // Build the WhatsApp URL BEFORE the async call so iOS doesn't block it
+    const whatsappUrl = (orderId?: string) => {
+      const message = formatWhatsAppMessage(orderId, checkoutData)
+      return `https://api.whatsapp.com/send?phone=${WHATSAPP_NUMBER}&text=${message}`
+    }
+
     try {
       const orderData = {
         customer_name: checkoutData.customerName,
@@ -123,18 +129,15 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
         setLastOrderId(result.order_id)
       }
       
-      const message = formatWhatsAppMessage(result.order_id, checkoutData)
-      window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, "_blank")
-      
       clearCart()
       setShowCheckout(false)
       onClose()
-      
-      setTimeout(() => setShowTracking(true), 1000)
+
+      // Use location.href for iOS compatibility (window.open is blocked after async)
+      window.location.href = whatsappUrl(result.order_id)
     } catch (error) {
       console.error('Error creating order:', error)
-      const message = formatWhatsAppMessage(undefined, checkoutData)
-      window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, "_blank")
+      window.location.href = whatsappUrl(undefined)
     } finally {
       setIsLoading(false)
     }

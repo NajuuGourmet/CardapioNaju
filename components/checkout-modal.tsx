@@ -58,7 +58,7 @@ export function CheckoutModal({ open, onClose, totalPrice, onConfirm, isLoading 
 
   const sendReceipt = () => {
     const message = `Ola! Segue o comprovante do PIX para o pedido.\n\nChave: ${PIX_KEY}\nValor: R$ ${finalTotal.toFixed(2).replace(".", ",")}`
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`, "_blank")
+    window.location.href = `https://api.whatsapp.com/send?phone=${WHATSAPP_NUMBER}&text=${encodeURIComponent(message)}`
   }
 
   const formatPhone = (value: string) => {
